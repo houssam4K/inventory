@@ -1,5 +1,5 @@
 import * as React from "react"
-import { DollarSign, TrendingUp } from "lucide-react"
+import { DollarSign, FileDown, TrendingUp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { supabase } from "@/lib/supabase"
+import { exportFinancePDF } from "@/lib/pdf"
 
 interface FinanceRow {
   id: string
@@ -44,6 +45,7 @@ function formatMonth(month: string) {
 export function Finance() {
   const [rows, setRows] = React.useState<FinanceRow[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [exporting, setExporting] = React.useState(false)
   const [currentMonth, setCurrentMonth] = React.useState(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -100,6 +102,15 @@ export function Finance() {
     return Array.from(map.values()).sort((a, b) => b.total - a.total)
   }, [rows])
 
+  function handleExport() {
+    setExporting(true)
+    try {
+      exportFinancePDF(rows, currentMonth, bySupplier)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 p-6 max-w-5xl mx-auto w-full">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -111,13 +122,25 @@ export function Finance() {
         </div>
       </div>
 
-      {/* Month navigation */}
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={prevMonth}>&larr;</Button>
-        <span className="text-sm font-medium min-w-[160px] text-center">
-          {formatMonth(currentMonth)}
-        </span>
-        <Button variant="outline" size="sm" onClick={nextMonth}>&rarr;</Button>
+      {/* Month navigation + export */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={prevMonth}>&larr;</Button>
+          <span className="text-sm font-medium min-w-[160px] text-center">
+            {formatMonth(currentMonth)}
+          </span>
+          <Button variant="outline" size="sm" onClick={nextMonth}>&rarr;</Button>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={loading || rows.length === 0 || exporting}
+          className="gap-1.5"
+        >
+          <FileDown className="size-3.5" />
+          {exporting ? "Exporting..." : "Export PDF"}
+        </Button>
       </div>
 
       {loading ? (

@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   ArrowLeft,
   Building2,
+  FileDown,
   Mail,
   Package,
   Phone,
@@ -38,6 +39,7 @@ import {
   type PackagingTransaction,
   type Supplier,
 } from "@/lib/types"
+import { exportPackagingPDF } from "@/lib/pdf"
 
 interface ShipmentRow {
   id: string
@@ -198,7 +200,7 @@ interface PackagingBalance {
   balance: number
 }
 
-function PackagingBalanceSection({ transactions }: { transactions: PackagingTransaction[] }) {
+function PackagingBalanceSection({ transactions, supplierName }: { transactions: PackagingTransaction[]; supplierName: string }) {
   const balance: PackagingBalance[] = PACKAGING_TYPES.map((pt) => {
     const sent = transactions
       .filter((t) => t.packaging_type === pt.value && t.transaction_type === "SENT")
@@ -211,8 +213,26 @@ function PackagingBalanceSection({ transactions }: { transactions: PackagingTran
 
   const history = [...transactions].sort((a, b) => b.date.localeCompare(a.date))
 
+  function handleExport() {
+    exportPackagingPDF(supplierName, transactions)
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Export button */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={transactions.length === 0}
+          className="gap-1.5"
+        >
+          <FileDown className="size-3.5" />
+          Export PDF
+        </Button>
+      </div>
+
       {/* Balance cards */}
       <div className="grid grid-cols-3 gap-3">
         {balance.map((b) => (
@@ -488,7 +508,7 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
           </TabsContent>
 
           <TabsContent value="packaging" className="mt-4">
-            <PackagingBalanceSection transactions={packaging} />
+            <PackagingBalanceSection transactions={packaging} supplierName={supplier.name} />
           </TabsContent>
         </Tabs>
       )}
