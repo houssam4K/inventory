@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Building2, Factory, LayoutDashboard, Package, TrendingUp } from "lucide-react"
+import { Building2, ClipboardList, Factory, LayoutDashboard, Package, TrendingUp } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -21,8 +21,9 @@ import { StockStatus } from "@/pages/StockStatus"
 import { Production } from "@/pages/Production"
 import { Suppliers } from "@/pages/Suppliers"
 import { Finance } from "@/pages/Finance"
+import { PhysicalInventory } from "@/pages/PhysicalInventory"
 
-type Page = "dashboard" | "stock-status" | "production" | "suppliers" | "finance"
+type Page = "dashboard" | "stock-status" | "production" | "suppliers" | "finance" | "physical-inventory"
 
 const NAV_ITEMS: { id: Page; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -30,6 +31,7 @@ const NAV_ITEMS: { id: Page; label: string; icon: React.ElementType }[] = [
   { id: "production", label: "Production", icon: Factory },
   { id: "suppliers", label: "Suppliers", icon: Building2 },
   { id: "finance", label: "Finance", icon: TrendingUp },
+  { id: "physical-inventory", label: "Physical Inventory", icon: ClipboardList },
 ]
 
 export function App() {
@@ -89,6 +91,7 @@ export function App() {
           {page === "production" && <Production />}
           {page === "suppliers" && <Suppliers />}
           {page === "finance" && <Finance />}
+          {page === "physical-inventory" && <PhysicalInventory />}
         </main>
       </SidebarInset>
     </SidebarProvider>

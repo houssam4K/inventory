@@ -96,3 +96,19 @@ export interface PackagingTransaction {
   note: string | null
   created_at: string
 }
+
+export interface InventorySession {
+  id: string
+  date: string
+  note: string | null
+  created_at: string
+}
+
+export interface InventoryEntry {
+  id: string
+  session_id: string
+  raw_material_id: string
+  theoretical_quantity: number
+  real_quantity: number
+  created_at: string
+}
