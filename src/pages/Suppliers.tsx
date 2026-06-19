@@ -200,7 +200,16 @@ interface PackagingBalance {
   balance: number
 }
 
-function PackagingBalanceSection({ transactions, supplierName }: { transactions: PackagingTransaction[]; supplierName: string }) {
+function PackagingBalanceSection({
+  transactions,
+  filteredTransactions,
+  supplierName,
+}: {
+  transactions: PackagingTransaction[]
+  filteredTransactions: PackagingTransaction[]
+  supplierName: string
+}) {
+  // Balance always uses all-time data
   const balance: PackagingBalance[] = PACKAGING_TYPES.map((pt) => {
     const sent = transactions
       .filter((t) => t.packaging_type === pt.value && t.transaction_type === "SENT")
@@ -211,10 +220,10 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
     return { type: pt.value, label: pt.label, sent, returned, balance: sent - returned }
   })
 
-  // Group transactions by (date, transaction_type) for compact display
+  // History uses filtered data (by month), grouped by (date, transaction_type)
   const groupedHistory = React.useMemo(() => {
     const map = new Map<string, PackagingTransaction[]>()
-    for (const t of transactions) {
+    for (const t of filteredTransactions) {
       const key = `${t.date.slice(0, 10)}_${t.transaction_type}`
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(t)
@@ -222,7 +231,7 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
     return Array.from(map.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([, items]) => items)
-  }, [transactions])
+  }, [filteredTransactions])
 
   function handleExport() {
     exportPackagingPDF(supplierName, transactions)
@@ -335,7 +344,11 @@ function PackagingBalanceSection({ transactions, supplierName }: { transactions:
       {groupedHistory.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Package className="size-10 text-muted-foreground/30 mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">No packaging transactions yet</p>
+          <p className="text-sm font-medium text-muted-foreground">
+            {filteredTransactions.length === 0 && transactions.length > 0
+              ? "No transactions in this month"
+              : "No packaging transactions yet"}
+          </p>
           <p className="text-xs text-muted-foreground/70 mt-1">
             Packaging is recorded when you create a new shipment.
           </p>
@@ -352,12 +365,21 @@ interface DetailProps {
   onBack: () => void
 }
 
+function fmtMonth(mk: string) {
+  const [y, m] = mk.split("-").map(Number)
+  return new Date(y, m - 1).toLocaleDateString("fr-DZ", { year: "numeric", month: "long" })
+}
+
 function SupplierDetail({ supplier, onBack }: DetailProps) {
   const [shipments, setShipments] = React.useState<ShipmentRow[]>([])
   const [packaging, setPackaging] = React.useState<PackagingTransaction[]>([])
   const [loading, setLoading] = React.useState(true)
   const [shipmentDialogOpen, setShipmentDialogOpen] = React.useState(false)
   const [returnDialogOpen, setReturnDialogOpen] = React.useState(false)
+  const [selectedMonth, setSelectedMonth] = React.useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  })
 
   async function load() {
     setLoading(true)
@@ -393,6 +415,30 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
     }
     return map
   }, [packaging])
+
+  const filteredShipments = React.useMemo(
+    () => shipments.filter((s) => s.date.slice(0, 7) === selectedMonth),
+    [shipments, selectedMonth]
+  )
+
+  const filteredPackaging = React.useMemo(
+    () => packaging.filter((t) => t.date.slice(0, 7) === selectedMonth),
+    [packaging, selectedMonth]
+  )
+
+  function prevMonth() {
+    const [y, m] = selectedMonth.split("-").map(Number)
+    const pm = m === 1 ? 12 : m - 1
+    const py = m === 1 ? y - 1 : y
+    setSelectedMonth(`${py}-${String(pm).padStart(2, "0")}`)
+  }
+
+  function nextMonth() {
+    const [y, m] = selectedMonth.split("-").map(Number)
+    const nm = m === 12 ? 1 : m + 1
+    const ny = m === 12 ? y + 1 : y
+    setSelectedMonth(`${ny}-${String(nm).padStart(2, "0")}`)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -458,6 +504,18 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
 
       <Separator />
 
+      {/* Month navigator */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground font-medium">Viewing</p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={prevMonth}>&larr;</Button>
+          <span className="text-sm font-medium min-w-[160px] text-center">
+            {fmtMonth(selectedMonth)}
+          </span>
+          <Button variant="outline" size="sm" onClick={nextMonth}>&rarr;</Button>
+        </div>
+      </div>
+
       {/* Tabs */}
       {loading ? (
         <div className="flex flex-col gap-3">
@@ -468,9 +526,9 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
           <TabsList>
             <TabsTrigger value="history">
               Shipment History{" "}
-              {shipments.length > 0 && (
+              {filteredShipments.length > 0 && (
                 <Badge variant="secondary" className="ml-1.5 text-xs">
-                  {shipments.length}
+                  {filteredShipments.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -478,12 +536,14 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
           </TabsList>
 
           <TabsContent value="history" className="mt-4">
-            {shipments.length === 0 ? (
+            {filteredShipments.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Truck className="size-10 text-muted-foreground/30 mb-3" />
-                <p className="text-sm font-medium text-muted-foreground">No shipments yet</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {shipments.length > 0 ? "No shipments in this month" : "No shipments yet"}
+                </p>
                 <p className="text-xs text-muted-foreground/70 mt-1">
-                  Click "New Shipment" to record the first delivery.
+                  {shipments.length === 0 && 'Click "New Shipment" to record the first delivery.'}
                 </p>
               </div>
             ) : (
@@ -502,7 +562,7 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {shipments.map((s) => {
+                    {filteredShipments.map((s) => {
                       const shipPkg = packagingByShipment.get(s.id) ?? []
                       const pkgParts = PACKAGING_TYPES
                         .map((pt) => {
@@ -557,7 +617,11 @@ function SupplierDetail({ supplier, onBack }: DetailProps) {
           </TabsContent>
 
           <TabsContent value="packaging" className="mt-4">
-            <PackagingBalanceSection transactions={packaging} supplierName={supplier.name} />
+            <PackagingBalanceSection
+              transactions={packaging}
+              filteredTransactions={filteredPackaging}
+              supplierName={supplier.name}
+            />
           </TabsContent>
         </Tabs>
       )}

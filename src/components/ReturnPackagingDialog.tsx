@@ -11,15 +11,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { supabase } from "@/lib/supabase"
-import { PACKAGING_TYPES, type PackagingType, type Supplier } from "@/lib/types"
+import { PACKAGING_TYPES, type Supplier } from "@/lib/types"
 
 interface Props {
   supplier: Supplier | null
@@ -29,8 +22,7 @@ interface Props {
 }
 
 export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props) {
-  const [packagingType, setPackagingType] = React.useState<PackagingType | "">("")
-  const [quantity, setQuantity] = React.useState("")
+  const [qtys, setQtys] = React.useState<Record<string, string>>({ box: "", pallet: "", mandrin: "" })
   const [date, setDate] = React.useState("")
   const [note, setNote] = React.useState("")
   const [error, setError] = React.useState("")
@@ -38,8 +30,7 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
 
   React.useEffect(() => {
     if (open) {
-      setPackagingType("")
-      setQuantity("")
+      setQtys({ box: "", pallet: "", mandrin: "" })
       setDate(new Date().toISOString().slice(0, 10))
       setNote("")
       setError("")
@@ -49,20 +40,30 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
-    if (!packagingType) { setError("Select a packaging type."); return }
-    const qty = parseInt(quantity, 10)
-    if (isNaN(qty) || qty <= 0) { setError("Quantity must be a positive whole number."); return }
+
     if (!date) { setError("Date is required."); return }
 
+    const inserts = PACKAGING_TYPES
+      .filter((pt) => {
+        const v = parseInt(qtys[pt.value] ?? "", 10)
+        return !isNaN(v) && v > 0
+      })
+      .map((pt) => ({
+        supplier_id: supplier!.id,
+        transaction_type: "RETURNED" as const,
+        packaging_type: pt.value,
+        quantity: parseInt(qtys[pt.value], 10),
+        date,
+        note: note.trim() || null,
+      }))
+
+    if (inserts.length === 0) {
+      setError("Enter at least one packaging quantity.")
+      return
+    }
+
     setLoading(true)
-    const { error: dbErr } = await supabase.from("packaging_transactions").insert({
-      supplier_id: supplier!.id,
-      transaction_type: "RETURNED",
-      packaging_type: packagingType,
-      quantity: qty,
-      date,
-      note: note.trim() || null,
-    })
+    const { error: dbErr } = await supabase.from("packaging_transactions").insert(inserts)
     setLoading(false)
 
     if (dbErr) { setError(dbErr.message); return }
@@ -86,36 +87,30 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="ret-type">Packaging Type</Label>
-            <Select value={packagingType} onValueChange={(v) => setPackagingType(v as PackagingType)}>
-              <SelectTrigger id="ret-type" className="w-full">
-                <SelectValue placeholder="Select type..." />
-              </SelectTrigger>
-              <SelectContent>
-                {PACKAGING_TYPES.map((pt) => (
-                  <SelectItem key={pt.value} value={pt.value}>
-                    {pt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* All packaging types at once */}
+          <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
+            {PACKAGING_TYPES.map((pt) => (
+              <div key={pt.value} className="flex items-center gap-3">
+                <Label className="min-w-[70px] text-sm">{pt.label}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  value={qtys[pt.value] ?? ""}
+                  onChange={(e) =>
+                    setQtys((prev) => ({ ...prev, [pt.value]: e.target.value }))
+                  }
+                  className="flex-1 h-8"
+                />
+                <span className="text-xs text-muted-foreground shrink-0 min-w-[60px]">
+                  {pt.value === "box" ? "boxes" : pt.value === "pallet" ? "pallets" : "mandrins"}
+                </span>
+              </div>
+            ))}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="ret-qty">Quantity</Label>
-              <Input
-                id="ret-qty"
-                type="number"
-                min="1"
-                step="1"
-                placeholder="0"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                autoFocus
-              />
-            </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="ret-date">Date</Label>
               <Input
@@ -125,16 +120,15 @@ export function ReturnPackagingDialog({ supplier, open, onClose, onDone }: Props
                 onChange={(e) => setDate(e.target.value)}
               />
             </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="ret-note">Note (optional)</Label>
-            <Input
-              id="ret-note"
-              placeholder="e.g. Returned after cleaning"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ret-note">Note (optional)</Label>
+              <Input
+                id="ret-note"
+                placeholder="e.g. After cleaning"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
