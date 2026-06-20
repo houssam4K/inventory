@@ -270,17 +270,9 @@ function PackagingBalanceSection({
     return { type: pt.value, label: pt.label, sent, returned, balance: sent - returned }
   })
 
-  // History uses filtered data (by month), grouped by (date, transaction_type)
-  const groupedHistory = React.useMemo(() => {
-    const map = new Map<string, PackagingTransaction[]>()
-    for (const t of filteredTransactions) {
-      const key = `${t.date.slice(0, 10)}_${t.transaction_type}`
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(t)
-    }
-    return Array.from(map.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([, items]) => items)
+  // History uses filtered data (by month), sorted newest first, each row = one transaction
+  const sortedHistory = React.useMemo(() => {
+    return [...filteredTransactions].sort((a, b) => b.date.localeCompare(a.date))
   }, [filteredTransactions])
 
   function handleExport() {
@@ -337,7 +329,7 @@ function PackagingBalanceSection({
       </div>
 
       {/* Transaction history */}
-      {groupedHistory.length > 0 && (
+      {sortedHistory.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-muted-foreground">Transaction History</p>
           <div className="rounded-xl border bg-card overflow-hidden">
@@ -347,30 +339,18 @@ function PackagingBalanceSection({
                   <TableHead>Date</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Packaging</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
                   <TableHead>Note</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {groupedHistory.map((group) => {
-                  const first = group[0]
-                  const isSent = first.transaction_type === "SENT"
-                  const parts = PACKAGING_TYPES
-                    .map((pt) => {
-                      const total = group
-                        .filter((t) => t.packaging_type === pt.value)
-                        .reduce((acc, t) => acc + t.quantity, 0)
-                      return total > 0 ? `${total} ${pt.label.toLowerCase()}` : null
-                    })
-                    .filter(Boolean)
-                  const note = group.find((t) => t.note)?.note ?? null
-
-                  // For grouped rows, show actions for single-item groups
-                  const singleItem = group.length === 1 ? group[0] : null
-
+                {sortedHistory.map((t) => {
+                  const isSent = t.transaction_type === "SENT"
+                  const pkgLabel = PACKAGING_TYPES.find((pt) => pt.value === t.packaging_type)?.label ?? t.packaging_type
                   return (
-                    <TableRow key={`${first.date.slice(0, 10)}_${first.transaction_type}`}>
-                      <TableCell className="text-sm">{formatDate(first.date)}</TableCell>
+                    <TableRow key={t.id}>
+                      <TableCell className="text-sm">{formatDate(t.date)}</TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"
@@ -383,34 +363,31 @@ function PackagingBalanceSection({
                           {isSent ? "Sent" : "Returned"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {parts.join(" · ") || "—"}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{note ?? "—"}</TableCell>
+                      <TableCell className="text-sm">{pkgLabel}</TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">{t.quantity}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{t.note ?? "—"}</TableCell>
                       <TableCell>
-                        {singleItem && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="size-7 p-0">
-                                <MoreHorizontal className="size-3.5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => onEdit(singleItem)}>
-                                <Pencil className="size-3.5 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => onDelete(singleItem)}
-                              >
-                                <Trash2 className="size-3.5 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="size-7 p-0">
+                              <MoreHorizontal className="size-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => onEdit(t)}>
+                              <Pencil className="size-3.5 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => onDelete(t)}
+                            >
+                              <Trash2 className="size-3.5 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   )
@@ -421,11 +398,11 @@ function PackagingBalanceSection({
         </div>
       )}
 
-      {groupedHistory.length === 0 && (
+      {sortedHistory.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Package className="size-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm font-medium text-muted-foreground">
-            {filteredTransactions.length === 0 && transactions.length > 0
+            {sortedHistory.length === 0 && transactions.length > 0
               ? "No transactions in this month"
               : "No packaging transactions yet"}
           </p>
